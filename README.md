@@ -6,34 +6,11 @@ are caught by swiping Poké Balls at them. Everything runs in the browser; a sma
 Python server serves the page over HTTPS on your LAN and stores your progress as
 plain JSON.
 
-> Educational / fan project. Pokémon and Pokémon GO artwork and models belong to
-> The Pokémon Company, Nintendo, Game Freak and Niantic. See
 > [Credits and licensing](#credits-and-licensing).
 
 ---
-
-## What it looks like
-
-* **Splash** (4 s) — `bt16` wordmark on a white screen, `Chucny Studios`
-  underneath.
-* **Loading** — `LOADING_SCREEN.webp` with the loading music, while the AR engine
-  and its SLAM chunk come up.
-* **Login** — trainer name + password, remembered in browser cookies.
-* **AR world** — the camera feed with spawned Pokémon standing on real surfaces,
-  proper ground shadows, and the game HUD.
-* **Outdoor tutorial** — one second after the AR session goes live, a single big
-  popup (the `findAPlane` illustration plus a signature-green OK button) asks you
-  to play outside: *“Back to 16 works better outside. Try going to a lawn,
-  forest, a big open area. Pokemon may not spawn inside.”* It replaces the old
-  top-centre tracking pill, which only ever printed `NORMAL · unspecified`.
-* **PokéStops** — one stop stands on a stable spot of real ground in front of
-  you. Tap it and it whips around with real decaying spin physics, then settles
-  into its closed, purple recharge state for a minute. A spin releases 1–4
-  soap bubbles with the item icon inside; tap a bubble to collect it (or let it
-  pop on its own) for 1–4 Poké Balls. Look away and the stop despawns, exactly
-  like a Pokémon, and a fresh one appears in front of you a few seconds later.
-* **Inspection / Pokédex** — holographic, glass-styled screens with the
-  mysterious light-blue light rising from the SLAM floor.
+### Screenshots
+Coming soon!
 
 ### UI style
 
@@ -722,7 +699,7 @@ least 64.
 | three.js (`vendor/three/`) | MIT |
 
 **Art, models, sounds** — Pokémon and Pokémon GO assets under `assets/` belong to
-The Pokémon Company / Nintendo / Game Freak / Niantic. They are included for
-educational, non-commercial fan use only and are **not** covered by this
-project's GPL licence. `bt16` is an unofficial fan project and is not affiliated
-with or endorsed by Nintendo, Niantic or The Pokémon Company.
+The Pokémon Company / Nintendo / Game Freak / Niantic. They are NOT included in this repository.
+
+**License**
+The project is licensed under the **GPL-3.0** license. See `LICENSE` file for details.
