@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>Back to 16 — bt16</title>
+  <meta name="description" content="Back to 16 (bt16) — a Pokémon GO style AR game without a map, built on 6DoF SLAM.">
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0b0b'/%3E%3Ctext x='16' y='22' font-family='Arial' font-size='15' font-weight='700' fill='%23fff' text-anchor='middle'%3Ebt16%3C/text%3E%3C/svg%3E">
+  <!-- The ?v= is the CLIENT_VERSION cache-buster (see main.js): the browser
+       caches by full URL, so every local module import and both of these tags
+       carry the same number. Bump them all together. -->
+  <link rel="stylesheet" href="./css/ui.css?v=16">
+
+  <!--
+    three.js is a plain ES module here; the import map below is what lets
+    `import * as THREE from 'three'` and the addons resolve without a bundler.
+  -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/three.module.js",
+      "three/addons/": "./vendor/three/addons/"
+    }
+  }
+  </script>
+
+  <!--
+    8th Wall boot.
+
+    Step 1: the open-source MIT engine (vendor/xr/xr.js).
+    Step 2: it preloads the `slam` chunk. Real world tracking (6DoF) lives in
+            the binary distribution, so we point that chunk at
+            vendor/xr-binary/xr-slam.js. The chunk URL must be ABSOLUTE.
+
+    The tag is built in JS so the URL can be resolved against document.baseURI
+    and the page keeps working when served from a subdirectory.
+  -->
+  <script>
+    (function () {
+      var script = document.createElement('script')
+      script.src = new URL('./vendor/xr/xr.js', document.baseURI).href
+      script.async = true
+      script.crossOrigin = 'anonymous'
+      script.setAttribute(
+        'data-preload-chunks',
+        'slam: ' + new URL('./vendor/xr-binary/xr-slam.js', document.baseURI).href,
+      )
+      document.head.appendChild(script)
+    })()
+  </script>
+
+  <!-- First-party helpers (canvas fit + unsupported-browser page). -->
+  <script src="./vendor/xrextras/xrextras.js" crossorigin="anonymous"></script>
+</head>
+
+<body>
+  <!-- The camera feed is painted here by XR8.GlTextureRenderer. -->
+  <canvas id="camerafeed"></canvas>
+
+  <!-- ===================================================================== -->
+  <!-- Splash — 4 seconds, bt16 logo, "Chucny Studios" underneath, white bg -->
+  <!-- ===================================================================== -->
+  <div id="splash" class="screen">
+    <div class="splash-inner">
+      <div class="bt16-logo" aria-label="bt16">bt16</div>
+      <div class="splash-studio">Chucny Studios</div>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- Loading screen — artwork only, no progress bar or copy                -->
+  <!-- ===================================================================== -->
+  <div id="loading" class="screen" hidden>
+    <img id="loading-art" src="/assets/pokemon-go/LOADING_SCREEN.webp" alt="">
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- Login screen — bt16 styled after the Pokémon GO sign-in screen        -->
+  <!-- ===================================================================== -->
+  <div id="login" class="screen" hidden>
+    <div class="login-card">
+      <div class="bt16-logo small" aria-label="bt16">bt16</div>
+      <p class="login-tag">Back to 16</p>
+
+      <form id="login-form" autocomplete="on">
+        <label class="login-field">
+          <span>Trainer name</span>
+          <input id="login-username" name="username" type="text" required
+                 autocomplete="username" placeholder="Trainer name">
+        </label>
+        <label class="login-field">
+          <span>Password</span>
+          <input id="login-password" name="password" type="password" required
+                 autocomplete="current-password" placeholder="Password">
+        </label>
+
+        <label class="login-remember">
+          <input id="login-remember" type="checkbox" checked>
+          <span>Remember me on this device</span>
+        </label>
+
+        <button id="login-submit" class="pogo-button primary" type="submit">Sign in</button>
+        <button id="login-register" class="pogo-button" type="button">Create account</button>
+
+        <p class="login-error" id="login-error" hidden></p>
+      </form>
+
+      <p class="login-server" id="login-server">Server: <span id="login-server-url">—</span></p>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- The AR world: HUD + overlays                                          -->
+  <!-- ===================================================================== -->
+  <div id="app" hidden>
+    <!-- HUD ----------------------------------------------------------------->
+    <div id="hud">
+      <!-- Upper-left: inventory, pokedex (button order per the spec) -->
+      <div id="hud-upper-left">
+        <button id="btn-inventory" class="hud-button" type="button" aria-label="Pokémon inventory">
+          <img src="/assets/pokemon-go/important-icons/menu/btn_action_menu.png" alt="">
+        </button>
+        <button id="btn-pokedex" class="hud-button" type="button" aria-label="Pokédex">
+          <img src="/assets/pokemon-go/important-icons/menu/btn_pokedex.png" alt="">
+        </button>
+      </div>
+
+      <!-- Right side: snapshot camera (always visible) -->
+      <button id="btn-snapshot" class="hud-button hud-right" type="button" aria-label="Take a snapshot">
+        <img src="/assets/pokemon-go/important-icons/menu/btn_camera_dark.png" alt="">
+      </button>
+
+      <!-- Bottom-right: the bag (item switch), always visible.
+           The button face is the Pokémon GO encounter bag icon; the ball you
+           are currently holding rides along as a small badge. -->
+      <button id="btn-item-switch" class="hud-button hud-bottom-right" type="button"
+              aria-label="Bag — switch item">
+        <img class="item-switch-bag" src="/assets/pokemon-go/important-icons/menu/btn_items_encounter.png" alt="">
+        <img id="item-switch-icon" class="item-switch-ball" src="/assets/items/icons/png/poke-ball.png" alt="">
+        <span id="item-switch-count" class="item-switch-count">0</span>
+      </button>
+
+      <!-- Hint + toast line. The old tracking pill ("NORMAL · unspecified") is
+           gone on purpose — the outdoor tutorial below says the same thing in a
+           way that is actually useful. -->
+      <div id="hud-hint" hidden></div>
+      <div id="hud-toast" hidden></div>
+
+      <!-- Diagnostics, only shown with ?debug=1 — see README. -->
+      <div id="hud-debug" hidden>
+        <span>fps <b id="debug-fps">–</b></span>
+        <span>tracking <b id="debug-track">–</b></span>
+        <span>frames <b id="debug-frames">0</b></span>
+        <span>surfaces <b id="debug-surfaces">–</b></span>
+        <span class="debug-err">engine <b id="debug-err">–</b></span>
+      </div>
+    </div>
+
+    <!-- Outdoor tutorial — one big popup, shown a second after the AR session
+         goes live (see startGame() in main.js). Its copy and illustration come
+         from the game master (`ui.tutorialText` / `ui.tutorialArt`). -->
+    <div id="tutorial" class="overlay tutorial-overlay" hidden>
+      <div class="tutorial-card">
+        <img id="tutorial-art" class="tutorial-art"
+             src="/assets/pokemon-go/important-icons/tutorials/findAPlane.png" alt="">
+        <p class="tutorial-text" id="tutorial-text">
+          Back to 16 works better outside. Try going to a lawn, forest, a big open
+          area. Pokemon may not spawn inside.
+        </p>
+        <button id="tutorial-ok" class="tutorial-ok" type="button">OK</button>
+      </div>
+    </div>
+
+    <!-- Item menu (opened by button #8) -->
+    <div id="item-menu" class="overlay" hidden>
+      <div class="item-menu-panel">
+        <header class="item-menu-head">
+          <h2>Items</h2>
+          <p id="item-menu-total">0</p>
+        </header>
+
+        <div class="item-menu-items" id="item-menu-items"></div>
+        <div class="item-menu-name" id="item-menu-name">Poké Ball</div>
+        <!-- Trash bin is intentionally not wired up (spec: code it, don't use it). -->
+        <button class="item-trash" id="item-trash" type="button" aria-label="Discard" hidden>
+          <img src="/assets/pokemon-go/important-icons/menu/btn_exit.png" alt="">
+        </button>
+      </div>
+
+      <!-- X: horizontally centred, at the bottom, floating above the menu. -->
+      <button class="pogo-close screen-close" id="item-menu-close" type="button" aria-label="Close">
+        <img src="/assets/pokemon-go/important-icons/menu/btn_close_normal_dark.png" alt="">
+      </button>
+    </div>
+
+    <!-- Pokémon storage (inventory) -->
+    <div id="inventory" class="overlay" hidden>
+      <div class="panel inventory-panel">
+        <header class="panel-head">
+          <h2>Pokémon</h2>
+          <span class="head-count" id="storage-count">0 / 600</span>
+        </header>
+
+        <div class="storage-search">
+          <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/>
+          </svg>
+          <input id="inventory-search" class="search" type="search"
+                 placeholder="Search Pokémon" autocomplete="off">
+        </div>
+
+        <div class="inventory-grid" id="inventory-grid"></div>
+        <p class="panel-empty" id="inventory-empty">No Pokémon yet. Head outside to an open area — a lawn, a park — and they will appear around you.</p>
+      </div>
+
+      <!-- X: horizontally centred, at the bottom, floating above the grid. -->
+      <button class="pogo-close screen-close" data-close type="button" aria-label="Close">
+        <img src="/assets/pokemon-go/important-icons/menu/btn_close_normal_dark.png" alt="">
+      </button>
+    </div>
+
+    <!-- Pokédex -->
+    <div id="pokedex" class="overlay" hidden>
+      <div class="panel pokedex-panel">
+        <header class="panel-head">
+          <h2>Pokédex</h2>
+          <span class="head-count" id="pokedex-count">0 / 151</span>
+        </header>
+        <div class="pokedex-grid" id="pokedex-grid"></div>
+      </div>
+
+      <!-- X: horizontally centred, at the bottom, floating above the grid. -->
+      <button class="pogo-close screen-close" data-close type="button" aria-label="Close">
+        <img src="/assets/pokemon-go/important-icons/menu/btn_close_normal_dark.png" alt="">
+      </button>
+    </div>
+
+    <!-- Pokémon inspection (AR hologram) -->
+    <div id="inspection" class="overlay hologram-overlay" hidden>
+      <div class="inspection-bar">
+        <div class="inspection-identity">
+          <div class="inspection-name" id="inspection-name">Pokémon</div>
+          <div class="inspection-nick" id="inspection-nick"></div>
+        </div>
+
+        <div class="inspection-types" id="inspection-types"></div>
+
+        <div class="inspection-rename">
+          <input id="inspection-nickname" type="text" maxlength="24"
+                 placeholder="Nickname" aria-label="Nickname" autocomplete="off">
+          <button id="inspection-rename-save" type="button" aria-label="Rename Pokémon">
+            <!-- Rename pencil, drawn in the Pokémon GO UI colour -->
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Transfer (release) — destructive, so it is not the green control colour. -->
+        <div class="inspection-actions">
+          <button id="inspection-transfer" type="button" aria-label="Transfer Pokémon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <button class="pogo-close screen-close inspection-close" id="inspection-close" type="button"
+              aria-label="Close">
+        <img src="/assets/pokemon-go/important-icons/menu/btn_close_normal_dark.png" alt="">
+      </button>
+      <p class="inspection-help" id="inspection-help">Tap the hologram to make it attack.</p>
+    </div>
+
+    <!-- Transfer (release) confirmation -->
+    <div id="transfer-confirm" class="overlay tutorial-overlay" hidden>
+      <div class="tutorial-card">
+        <p class="tutorial-text" id="transfer-text">Transfer this Pokémon?</p>
+        <p class="transfer-note">It leaves your storage for good. This cannot be undone. Its Pokédex entry stays.</p>
+        <button class="tutorial-ok danger" id="transfer-confirm-go" type="button">Transfer</button>
+        <button class="tutorial-secondary" id="transfer-confirm-cancel" type="button">Keep</button>
+      </div>
+    </div>
+
+    <!-- Snapshot preview -->
+    <div id="snapshot" class="overlay" hidden>
+      <div class="snapshot-card">
+        <img id="snapshot-img" alt="Snapshot">
+        <a id="snapshot-download" class="pogo-button primary" download="bt16-snapshot.png">Save photo</a>
+      </div>
+
+      <!-- X: horizontally centred, at the bottom, floating above the photo. -->
+      <button class="pogo-close screen-close" id="snapshot-close" type="button" aria-label="Close">
+        <img src="/assets/pokemon-go/important-icons/menu/btn_close_normal_dark.png" alt="">
+      </button>
+    </div>
+  </div>
+
+  <!-- Fatal-error card -->
+  <div id="fatal" class="screen" hidden>
+    <div class="login-card">
+      <div class="bt16-logo small">bt16</div>
+      <h2>Something went wrong</h2>
+      <p id="fatal-msg"></p>
+      <p class="muted">A secure context (https://) and camera permission are required.</p>
+    </div>
+  </div>
+
+  <audio id="sfx" preload="auto"></audio>
+
+  <!--
+    Boot watchdog.
+
+    If the module graph does not load — a file is missing, or a proxy/tunnel
+    answers with an HTML error page that the browser reports as a MIME error —
+    then NOTHING in main.js runs and the splash screen stays up for ever with no
+    explanation. main.js sets `__bt16ModuleLoaded` as soon as it begins; if that
+    flag is still missing after a few seconds, say so instead of hanging.
+  -->
+  <script>
+    (function () {
+      window.__bt16ModuleLoaded = false
+      window.setTimeout(function () {
+        if (window.__bt16ModuleLoaded) return
+        var fatal = document.getElementById('fatal')
+        var msg = document.getElementById('fatal-msg')
+        if (msg) msg.textContent =
+          'The game code could not be loaded. Reload the page — and if it keeps ' +
+          'happening, the server is answering a module request with an HTML error ' +
+          'page (check the console for a "disallowed MIME type" message).'
+        if (fatal) fatal.hidden = false
+        var splash = document.getElementById('splash')
+        var loading = document.getElementById('loading')
+        if (splash) splash.hidden = true
+        if (loading) loading.hidden = true
+      }, 9000)
+    })()
+  </script>
+
+  <script type="module" src="./js/main.js?v=16"></script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Server runtime data (players + logs) and generated TLS certificate
+server/certs/
+server/data/
+server/logs/
+
+# Tunnel binary downloaded on demand (third-party, ~53 MB, not ours to ship).
+# Scoped by name so any other tool dropped in server/tools/ is still tracked.
+server/tools/
+**/cloudflared.exe
+**/cloudflared
+
+# Game assets (Pokemon art/models, ~500 MB, not redistributable here).
+# Vendored 8th Wall / three.js runtime in web/vendor/ is intentionally NOT
+# ignored - the app cannot run without it.
+assets/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log

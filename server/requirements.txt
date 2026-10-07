@@ -1,0 +1,11 @@
+# Back to 16 (bt16) server
+#
+# The server runs on the Python standard library alone. Nothing here is
+# required to start it.
+#
+# `cryptography` is only used as a fallback for generating the self-signed TLS
+# certificate when the `openssl` binary is not available on PATH:
+#
+#   pip install cryptography
+#
+# In the common case (openssl installed) no third-party package is needed.

@@ -1,0 +1,1085 @@
+/* ==========================================================================
+   Back to 16 (bt16) — UI
+
+   Pokémon GO visual language, sampled straight off the reference screenshots
+   in references/: a mint-white sheet inside a green→teal edge frame, slate
+   ink for every heading, title and number, gray-teal captions, and green→teal
+   gradient pills with bold white uppercase copy for the primary actions
+   (secondary actions are plain teal text, like GO's CANCEL). Green stays
+   reserved for controls, selections and a few small accents: text is never
+   green. Flat surfaces, no borders doing the talking, generous corner radii.
+
+   Layout rules that matter:
+     · every in-game UI (item menu, storage, Pokédex, inspection, snapshot) is
+       FULLSCREEN — no floating centred cards;
+     · the X lives in every one of them, horizontally centred at the bottom of
+       the screen, floating above the panel (see `.screen-close`);
+     · the X is centred with left/right + margin auto, never translateX(-50%),
+       so the press feedback can shrink it without the hit box sliding out from
+       under the finger (that bug has bitten this file before);
+     · no backdrop blur anywhere: a full-viewport blur over the live WebGL
+       camera canvas makes some mobile GPUs stop repainting the feed.
+   ========================================================================== */
+
+:root {
+  /* --- mint-white shell, teal controls, slate (not green) text ----------- */
+  /* Every value marked "sampled" comes straight off the reference shots. */
+  --bg: #f8fff7;             /* sampled: the screens' mint-white */
+  --bg-soft: #fbfffa;
+  --surface: #ffffff;
+  --surface-sunken: #eef4f0;
+  --overlay-bg: #f7fff6;     /* fullscreen sheets */
+  --overlay-bg-glass: rgba(253, 255, 253, 0.96);
+  --sheet-top: #fdfffd;      /* sheet gradient, top → bottom */
+  --sheet-mid: #f7fff6;
+  --sheet-bottom: #effaf0;
+  --frame-left-top: #b4f09c;    /* sampled: green→teal edge frame, left bar */
+  --frame-left-bottom: #7fd6a9;
+  --frame-right-top: #7ad3aa;   /* sampled: right bar, a shade more teal */
+  --frame-right-bottom: #44b9b6;
+
+  /* Pokémon GO UI-kit greens (the kit's own values, not a Material green) */
+  --green: #71f5c9;          /* GO mint — discs, rings, selections */
+  --green-bright: #8ff7d6;   /* a touch lighter, for hovers + selected fills */
+  --green-dark: #1d8696;     /* sampled: GO teal — close discs, text actions */
+  --green-deeper: #146570;   /* deeper teal, for pressed states */
+  --green-pale: #e4f8ea;     /* pale mint wash — light surfaces */
+  --green-tint: #effdf4;
+  --pill-from: #a5db92;      /* sampled: primary pill gradient (POWER UP) */
+  --pill-mid: #62d39d;
+  --pill-to: #1fc9a6;
+  --pill-gradient: linear-gradient(90deg,
+    var(--pill-from) 0%, var(--pill-mid) 50%, var(--pill-to) 100%);
+
+  /* Text and numbers stay neutral — the interface must not read as "all green". */
+  --ink: #44696c;            /* sampled: slate — headings, titles, numbers */
+  --ink-soft: #7d9a9c;       /* secondary text */
+  --ink-muted: #90a6a7;      /* sampled: captions + placeholders */
+  --neutral-pale: #edf5ef;   /* mint-gray wash for inputs and count pills */
+  --line: rgba(68, 105, 108, 0.14);
+
+  /* Kept for the type chips and a couple of one-off accents. */
+  --go-blue: #2f6db5;
+  --go-yellow: #ffcb05;
+  --danger: #d6453f;
+
+  /* --- flat, soft shadows (no neumorphic insets) ------------------------- */
+  --shadow-soft: 0 3px 10px rgba(20, 28, 24, 0.13);
+  --shadow-card: 0 6px 16px rgba(20, 28, 24, 0.13);
+  --shadow-float: 0 12px 28px rgba(20, 28, 24, 0.22);
+
+  --radius-xl: 30px;
+  --radius-lg: 24px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+  --pill: 999px;
+
+  /* Space reserved at the bottom of a fullscreen panel for the floating X. */
+  --close-gutter: 118px;
+
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: var(--font);
+  color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  overscroll-behavior: none;
+}
+
+body { position: fixed; inset: 0; }
+
+img { -webkit-user-drag: none; user-drag: none; }
+
+button { font-family: inherit; cursor: pointer; }
+
+input { font-family: inherit; }
+
+.muted { color: var(--ink-muted); }
+
+/* --------------------------------------------------------------------------
+   Camera feed
+   -------------------------------------------------------------------------- */
+#camerafeed {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  background: var(--bg);
+}
+
+/* --------------------------------------------------------------------------
+   Full screen screens (splash / loading / login / fatal)
+   -------------------------------------------------------------------------- */
+.screen {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+.screen[hidden] { display: none; }
+
+/* --- Splash: 4s, white, bt16 logo + "Chucny Studios" -------------------- */
+#splash {
+  background: #ffffff;
+  z-index: 60;
+  transition: opacity 0.45s ease;
+}
+#splash.leaving { opacity: 0; }
+
+.splash-inner { text-align: center; animation: splash-pop 0.6s ease both; }
+
+.bt16-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #101314;
+  color: #ffffff;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  border-radius: var(--radius-lg);
+  padding: 0.18em 0.42em;
+  font-size: clamp(56px, 20vw, 120px);
+  line-height: 1.05;
+  box-shadow: var(--shadow-card);
+}
+.bt16-logo.small { font-size: 40px; border-radius: var(--radius-md); }
+
+.splash-studio {
+  margin-top: 22px;
+  color: var(--ink-soft);
+  font-size: clamp(16px, 4.5vw, 24px);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+@keyframes splash-pop {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* --- Loading: the GO artwork alone, no bar or copy ----------------------- */
+#loading { background: #ffffff; z-index: 55; }
+#loading-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* --- Login: fullscreen, not a floating card ------------------------------ */
+#login {
+  background:
+    linear-gradient(180deg, var(--sheet-top) 0%, var(--sheet-mid) 55%, var(--sheet-bottom) 100%);
+  z-index: 52;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto;
+  padding: 28px 24px calc(28px + env(safe-area-inset-bottom));
+  text-align: center;
+}
+.login-tag {
+  margin: 12px 0 22px;
+  color: var(--ink-soft);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.login-field { display: block; text-align: left; margin-bottom: 14px; }
+.login-field > span {
+  display: block;
+  margin: 0 0 7px 6px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ink-soft);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.login-field input {
+  width: 100%;
+  padding: 14px 18px;
+  font-size: 16px;
+  color: var(--ink);
+  background: var(--neutral-pale);
+  border: none;
+  border-radius: var(--pill);
+  outline: none;
+}
+.login-field input::placeholder { color: var(--ink-muted); }
+.login-field input:focus { background: #e2efe8; }
+
+.login-remember {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 6px 0 20px 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-align: left;
+}
+.login-remember input { width: 19px; height: 19px; accent-color: var(--green); }
+
+/* GO secondary: plain teal uppercase text on nothing — the reference CANCEL. */
+.pogo-button {
+  display: block;
+  width: 100%;
+  padding: 13px 22px;
+  margin-bottom: 11px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--green-dark);
+  background: none;
+  border: none;
+  border-radius: var(--pill);
+  text-align: center;
+  text-decoration: none;
+  transition: transform 0.09s ease, filter 0.15s ease;
+}
+.pogo-button:active {
+  transform: translateY(1px);
+  filter: brightness(0.94);
+}
+/* GO primary: the sampled green→teal gradient pill, bold white copy. */
+.pogo-button.primary {
+  padding: 15px 22px;
+  font-size: 16px;
+  color: #ffffff;
+  background: var(--pill-gradient);
+  box-shadow: 0 6px 16px rgba(31, 201, 166, 0.32);
+}
+.pogo-button.primary:active { filter: brightness(0.95); }
+.pogo-button:disabled { opacity: 0.55; }
+
+.login-error {
+  margin: 8px 0 0;
+  padding: 10px 16px;
+  color: #93241f;
+  background: #fdeceb;
+  border-radius: var(--pill);
+  font-size: 14px;
+  font-weight: 600;
+}
+.login-server {
+  margin: 18px 0 0;
+  font-size: 12px;
+  color: var(--ink-muted);
+  word-break: break-all;
+}
+
+/* --------------------------------------------------------------------------
+   HUD — the GO icon set is already a set of self-contained discs, so the
+   buttons only need a soft lift to sit on top of the camera feed.
+   -------------------------------------------------------------------------- */
+#app[hidden] { display: none; }
+#hud { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
+
+.hud-button {
+  position: absolute;
+  pointer-events: auto;
+  background: none;
+  border: none;
+  padding: 0;
+  width: 64px;
+  height: 64px;
+  filter: drop-shadow(0 6px 12px rgba(20, 28, 24, 0.3));
+  transition: transform 0.09s ease;
+}
+.hud-button img { width: 100%; height: 100%; object-fit: contain; }
+.hud-button:active { transform: scale(0.94); }
+
+#hud-upper-left {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  left: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#hud-upper-left .hud-button { position: relative; }
+
+.hud-right {
+  top: max(14px, env(safe-area-inset-top));
+  right: 14px;
+}
+
+/* Bottom-right bag: like button 8 in the reference, always visible. */
+.hud-bottom-right {
+  bottom: max(22px, env(safe-area-inset-bottom));
+  right: 18px;
+  width: 88px;
+  height: 88px;
+}
+.item-switch-bag { width: 100%; height: 100%; object-fit: contain; }
+
+/* The ball you are holding rides on the bag as a small badge. */
+.item-switch-ball {
+  position: absolute;
+  right: -2px;
+  top: -2px;
+  width: 34px;
+  height: 34px;
+  padding: 3px;
+  object-fit: contain;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: var(--shadow-soft);
+}
+
+/* Count of the ball currently held, on the bag button. */
+.item-switch-count {
+  position: absolute;
+  right: 0;
+  bottom: 2px;
+  min-width: 30px;
+  padding: 2px 8px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #ffffff;
+  text-align: center;
+  background: var(--ink);
+  border-radius: 999px;
+  box-shadow: var(--shadow-soft);
+}
+
+#hud-hint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(max(22px, env(safe-area-inset-bottom)) + 116px);
+  transform: translateX(-50%);
+  padding: 11px 22px;
+  max-width: 84vw;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: center;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: var(--pill);
+  box-shadow: var(--shadow-soft);
+  transition: opacity 0.35s ease;
+}
+
+#hud-toast {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  transform: translate(-50%, -50%);
+  padding: 15px 28px;
+  max-width: 84vw;
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffffff;
+  text-align: center;
+  background: #2b3034;
+  border-radius: var(--pill);
+  box-shadow: var(--shadow-float);
+  animation: toast-in 0.3s ease both;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.92); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* Diagnostics — only unhidden by main.js when the URL has ?debug=1. */
+#hud-debug {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: calc(max(14px, env(safe-area-inset-top)) + 74px);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+#hud-debug[hidden] { display: none; }
+#hud-debug span {
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: var(--pill);
+}
+#hud-debug b { color: var(--ink); }
+#hud-debug .debug-err b { color: var(--danger); }
+
+/* --------------------------------------------------------------------------
+   Generic fullscreen overlay
+   -------------------------------------------------------------------------- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg,
+    var(--sheet-top) 0%, var(--sheet-mid) 45%, var(--sheet-bottom) 100%);
+}
+.overlay[hidden] { display: none; }
+
+/* The green→teal edge frame from the reference screenshots. It wraps every
+   sheet screen AND the login screen; the Pokédex carries the lavender
+   gradient instead, and the tutorial scrim / AR hologram stay clear of it. */
+.overlay:not(#pokedex):not(.tutorial-overlay):not(.hologram-overlay)::before,
+.overlay:not(#pokedex):not(.tutorial-overlay):not(.hologram-overlay)::after,
+#login::before,
+#login::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  z-index: 1;
+  pointer-events: none;
+}
+.overlay:not(#pokedex):not(.tutorial-overlay):not(.hologram-overlay)::before,
+#login::before {
+  left: 0;
+  background: linear-gradient(180deg, var(--frame-left-top), var(--frame-left-bottom));
+}
+.overlay:not(#pokedex):not(.tutorial-overlay):not(.hologram-overlay)::after,
+#login::after {
+  right: 0;
+  background: linear-gradient(180deg, var(--frame-right-top), var(--frame-right-bottom));
+}
+
+.panel {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Reference header: letterspaced uppercase title, gray counter under it,
+   hairline below — centred, never a left/right row. */
+.panel-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 18px 22px 12px;
+  text-align: center;
+  border-bottom: 1px solid var(--line);
+}
+.panel-head h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.panel-empty {
+  margin: 0;
+  padding: 34px 22px var(--close-gutter);
+  text-align: center;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+.panel-empty[hidden] { display: none; }
+
+/* --------------------------------------------------------------------------
+   The X button: horizontally centred, at the bottom, floating above the UI
+   -------------------------------------------------------------------------- */
+.pogo-close { position: relative; z-index: 6; }
+
+.screen-close {
+  position: absolute;
+  /* Centred by layout, NOT by translateX(-50%): the release feedback scales
+     the inner image, so the button's hit box never moves. */
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  background: none;
+  border: none;
+  filter: drop-shadow(0 10px 18px rgba(20, 28, 24, 0.28));
+}
+.screen-close img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transition: transform 0.09s ease;
+}
+.screen-close:active img { transform: scale(0.88); }
+
+/* The counter under the title: plain gray text, no pill (reference style). */
+.head-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  background: none;
+  white-space: nowrap;
+}
+
+.search {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 12px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--neutral-pale);
+  border: none;
+  border-radius: var(--pill);
+  outline: none;
+}
+.search::placeholder { color: var(--ink-muted); }
+.search:focus { background: #e2efe8; }
+
+/* --------------------------------------------------------------------------
+   Item menu — fullscreen (spec: copy the style + colours exactly)
+   -------------------------------------------------------------------------- */
+.item-menu-panel {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 0 var(--close-gutter);
+  text-align: center;
+}
+.item-menu-head {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: calc(18px + env(safe-area-inset-top)) 22px 12px;
+  text-align: center;
+  border-bottom: 1px solid var(--line);
+}
+.item-menu-head h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.item-menu-head p {
+  margin: 5px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+/* The reference ITEMS list: borderless rows on the mint sheet, hairlines
+   between them, scrolling inside the panel. */
+.item-menu-items {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 4px 16px 18px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.item-slot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 13px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  text-align: left;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+.item-slot img {
+  width: 74px;
+  height: 74px;
+  flex: 0 0 auto;
+  display: block;
+  margin: 0;
+  object-fit: contain;
+}
+.item-slot .item-slot-label {
+  display: block;
+  margin-top: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.item-slot[data-selected="true"] {
+  background: #ffffff;
+  border-radius: var(--radius-md);
+  border-bottom-color: transparent;
+  box-shadow: var(--shadow-card), inset 0 0 0 3px var(--green);
+}
+.item-slot[data-legendary-only="true"] .item-slot-label::after {
+  content: " ★";
+  color: var(--go-yellow);
+}
+
+/* How many you carry — the pale pill tucked under the icon, as in the
+   reference ITEMS list: a count, never "x / y" (there is no capacity). */
+.item-slot-count {
+  position: absolute;
+  left: 8px;
+  top: calc(50% + 13px);
+  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ink);
+  background: #e8f8e8;
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(20, 28, 24, 0.14);
+}
+.item-slot[data-empty="true"] { opacity: 0.55; }
+.item-slot[data-empty="true"] .item-slot-count {
+  color: #ffffff;
+  background: var(--ink-soft);
+}
+
+.item-menu-name {
+  padding: 12px 0 4px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  text-align: center;
+}
+.item-trash {
+  position: absolute;
+  right: 16px;
+  bottom: calc(var(--close-gutter) + 8px);
+  width: 44px;
+  height: 44px;
+  background: none;
+  border: none;
+  opacity: 0.6;
+}
+.item-trash img { width: 100%; height: 100%; object-fit: contain; }
+
+/* --------------------------------------------------------------------------
+   Pokémon storage (inventory) — fullscreen
+   -------------------------------------------------------------------------- */
+.inventory-panel { background: transparent; }
+
+.storage-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px 16px;
+}
+.search-icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  fill: var(--ink-soft);
+}
+
+.inventory-grid {
+  display: grid;
+  /* A fixed 3 across, growing downward (3 x X). */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  /* flex + min-height: the grid has to be the thing that scrolls inside the
+     fullscreen panel, not the panel spilling off the bottom of the screen. */
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 18px 18px var(--close-gutter);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+/* Square, borderless tiles — not tall cards. */
+.storage-card {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 7px;
+  background: var(--surface);
+  border: none;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+}
+.storage-card:active {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-soft);
+}
+
+/* The tile: type art as the background, the Pokémon icon on top. */
+.storage-art {
+  /* Fills the square card, so the card stays square instead of stretching. */
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background-size: cover;
+  background-position: center;
+}
+.storage-art img {
+  width: 76%;
+  height: 76%;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 5px rgba(16, 60, 70, 0.4));
+}
+.storage-name {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--ink);
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Pokédex — fullscreen on the reference's white→lavender→periwinkle sheet
+   -------------------------------------------------------------------------- */
+#pokedex {
+  background: linear-gradient(180deg,
+    #fdfdff 0%, #f5edfd 14%, #e7deff 30%, #dbdbfd 52%,
+    #d3dafd 66%, #d0e0ff 79%, #c8e0ff 100%);
+}
+.pokedex-panel { background: transparent; }
+.pokedex-panel .head-count { color: var(--ink-muted); }
+.pokedex-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 18px 16px var(--close-gutter);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+/* Borderless on the lavender sheet: sprites sit directly on the gradient,
+   uncaught entries are a soft slate number. */
+.dex-cell {
+  position: relative;
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  color: var(--ink);
+}
+.dex-cell img {
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 5px rgba(72, 72, 120, 0.28));
+}
+.dex-cell .dex-num {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: rgba(68, 105, 108, 0.5);
+}
+.dex-cell.caught { background: none; box-shadow: none; }
+.dex-cell .dex-cell-name {
+  position: absolute;
+  bottom: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink);
+  max-width: 92%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Pokémon inspection (AR hologram)
+   -------------------------------------------------------------------------- */
+.hologram-overlay {
+  background: none;
+  pointer-events: none;
+}
+.hologram-overlay .inspection-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 14px;
+  padding: calc(16px + env(safe-area-inset-top)) 18px 18px;
+  background: #ffffff;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  box-shadow: 0 10px 24px rgba(20, 28, 24, 0.16);
+  pointer-events: auto;
+}
+.inspection-identity { display: flex; flex-direction: column; line-height: 1.15; }
+.inspection-name { font-size: 18px; font-weight: 800; color: var(--ink); }
+.inspection-nick { font-size: 11px; font-weight: 700; color: var(--ink-muted); }
+
+.inspection-types { display: flex; gap: 6px; }
+.type-chip {
+  min-width: 64px;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  background-size: cover;
+  background-position: center;
+  border: none;
+  border-radius: var(--pill);
+}
+
+.inspection-rename { display: flex; align-items: center; gap: 8px; margin: 0; }
+.inspection-rename input {
+  width: 158px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--neutral-pale);
+  border: none;
+  border-radius: var(--pill);
+  outline: none;
+}
+.inspection-rename input:focus { background: #e5e8e9; }
+/* The rename pencil is a green GO disc to match the rest of the controls. */
+.inspection-rename button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: var(--green);
+  border: none;
+  border-radius: 50%;
+  box-shadow: 0 5px 12px rgba(28, 134, 150, 0.32);
+}
+.inspection-rename button:active { filter: brightness(0.94); }
+.inspection-rename button svg { width: 19px; height: 19px; fill: #ffffff; }
+
+/* Transfer is destructive, so it is a red disc — never the green control colour. */
+.inspection-actions { display: flex; align-items: center; gap: 8px; }
+.inspection-actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: var(--danger);
+  border: none;
+  border-radius: 50%;
+  box-shadow: 0 5px 12px rgba(190, 50, 50, 0.32);
+}
+.inspection-actions button:active { filter: brightness(0.94); }
+.inspection-actions button svg { width: 19px; height: 19px; fill: #ffffff; }
+
+.inspection-close { pointer-events: auto; }
+
+.inspection-help {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(max(22px, env(safe-area-inset-bottom)) + 86px);
+  margin: 0 auto;
+  max-width: 78vw;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: center;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: var(--pill);
+  box-shadow: var(--shadow-soft);
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   Snapshot preview — fullscreen
+   -------------------------------------------------------------------------- */
+.snapshot-card {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+  padding: calc(20px + env(safe-area-inset-top)) 18px var(--close-gutter);
+  text-align: center;
+}
+.snapshot-card img {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  object-fit: contain;
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+  box-shadow: var(--shadow-card);
+}
+.snapshot-card .pogo-button { width: 100%; max-width: 420px; margin: 0 auto; }
+
+/* --------------------------------------------------------------------------
+   Outdoor tutorial
+
+   One big, flat, white popup, a second after the AR session goes live: the
+   `findAPlane` illustration, the "go outside" copy, and a single signature-green
+   OK button. Shown once per session (main.js -> ui.showTutorial()).
+   -------------------------------------------------------------------------- */
+.tutorial-overlay {
+  z-index: 30;               /* over the HUD and the panel overlays */
+  align-items: center;
+  justify-content: center;
+  padding: 24px 18px;
+  /* A plain scrim, not a blur: the live camera stays visible behind the card,
+     and a full-viewport blur is what stalls the WebGL feed on some phones. */
+  background: rgba(16, 19, 20, 0.55);
+}
+.tutorial-card {
+  width: 100%;
+  max-width: 430px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  padding: 30px 26px 28px;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  text-align: center;
+  animation: tutorial-in 0.28s ease both;
+}
+@keyframes tutorial-in {
+  from { opacity: 0; transform: scale(0.93); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.tutorial-art {
+  width: 100%;
+  max-width: 300px;
+  height: auto;
+  object-fit: contain;
+}
+.tutorial-text {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: var(--ink);
+}
+/* The signature GO pill — the reference's green→teal gradient, white copy. */
+.tutorial-ok {
+  width: 100%;
+  max-width: 300px;
+  padding: 18px 28px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ffffff;
+  background: var(--pill-gradient);
+  border: none;
+  border-radius: var(--pill);
+  box-shadow: 0 8px 18px rgba(31, 201, 166, 0.32);
+  transition: transform 0.09s ease, filter 0.12s ease;
+}
+.tutorial-ok:active {
+  filter: brightness(0.95);
+  transform: scale(0.97);
+}
+/* The transfer confirmation reuses the tutorial card: a red confirm and a
+   neutral "keep" so the safe choice is the easy one. */
+.tutorial-ok.danger {
+  color: #ffffff;
+  background: var(--danger);
+  box-shadow: 0 8px 18px rgba(190, 50, 50, 0.3);
+}
+.tutorial-ok.danger:active { background: #c93b3f; }
+/* The reference CANCEL: plain teal uppercase text, nothing behind it. */
+.tutorial-secondary {
+  width: 100%;
+  max-width: 300px;
+  padding: 12px 28px;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--green-dark);
+  background: none;
+  border: none;
+  border-radius: var(--pill);
+}
+.tutorial-secondary:active { filter: brightness(0.85); }
+.transfer-note {
+  margin: -12px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--ink-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Fatal
+   -------------------------------------------------------------------------- */
+#fatal { background: var(--bg); z-index: 70; }
+#fatal h2 { margin: 16px 0 8px; color: var(--danger); }
+#fatal p { margin: 6px 0; color: var(--ink-soft); }
+
+/* --------------------------------------------------------------------------
+   Wider screens: keep the fullscreen sheets readable, but never float them.
+   -------------------------------------------------------------------------- */
+@media (min-width: 720px) {
+  .panel-head { padding: 24px 40px 16px; }
+  .storage-search { padding: 16px 40px 18px; }
+  .inventory-grid { padding: 22px 40px var(--close-gutter); }
+  .pokedex-grid { padding: 22px 40px var(--close-gutter); }
+  .item-menu-items { max-width: 640px; }
+}

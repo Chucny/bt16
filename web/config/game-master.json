@@ -1,0 +1,169 @@
+{
+  "_comment": "bt16 game master — every gameplay tunable in one file. The client fetches this at boot (web/js/gamemaster.js) and the game reads it live, so a spawn rate or a catch chance can be changed here without touching code. Units: _M metres, _S seconds, _Ms milliseconds, _Rad radians.",
+  "version": 3,
+  "updated": "2026-10-01",
+
+  "spawn": {
+    "intervalMs": 10000,
+    "intervalJitterMs": 4000,
+    "minIntervalMs": 2000,
+    "retryMs": 2500,
+    "maxAlive": 4,
+    "minDistanceM": 2,
+    "maxDistanceM": 10,
+    "minSeparationM": 0.4,
+    "surfaceMinY": 0.55,
+    "surfaceStepM": 0.1,
+    "surfaceCacheMs": 200,
+    "maxSamples": 30,
+    "preferFrontDeg": 75
+  },
+
+  "species": {
+    "dexMin": 1,
+    "dexMax": 151,
+    "legendaryChance": 0.08,
+    "legendaryDex": [144, 145, 146, 150, 151]
+  },
+
+  "catch": {
+    "chance": {"poke": 0.5, "great": 0.65, "ultra": 0.8, "premier": 0.55},
+    "fallbackChance": 0.5,
+    "legendaryMultiplier": 0.4,
+    "shakesOnCatch": 3,
+    "escapeShakeChance": 0.5,
+    "shakeSeconds": 2,
+    "shakeTiltRad": 0.62,
+    "escapeCooldownS": 1.4
+  },
+
+  "throw": {
+    "originDropM": 0.25,
+    "powerBase": 3.2,
+    "powerPerLength": 7,
+    "powerVelocityWeight": 4,
+    "lateralPower": 3.2,
+    "liftBase": 1.4,
+    "liftPerLength": 3,
+    "minSwipePx": 40,
+    "swipeSpeedMinS": 0.05,
+    "swipeSpeedMaxS": 1,
+    "velocityRefS": 0.35,
+    "velocityFloor": 0.15,
+    "spinMax": 12
+  },
+
+  "ball": {
+    "gravity": 9.81,
+    "diameterM": 0.22,
+    "groundBounceM": 0.15,
+    "hitBounceM": 1,
+    "missBounceCount": 3,
+    "missBounceBaseM": 0.22,
+    "missBounceDecay": 0.42,
+    "missBounceFriction": 0.62,
+    "rollSeconds": 1.6,
+    "rollFriction": 2.6,
+    "rollStopMps": 0.25,
+    "missFadeSeconds": 0.5,
+    "collisionMinRadiusM": 0.25,
+    "collisionHeightFactor": 0.4
+  },
+
+  "tracking": {
+    "lostAfterS": 3,
+    "lostStatuses": ["LIMITED", "NOT_AVAILABLE"],
+    "advanced": true,
+    "surface": {
+      "sampleStep": 0.06,
+      "refreshPerFrame": 16,
+      "warmupMultiplier": 3,
+      "gridM": 0.25,
+      "staleAfterS": 6,
+      "minNormalY": 0.7,
+      "minFloorCells": 3,
+      "minPatchCells": 2,
+      "floorSmooth": 0.2,
+      "elevatedMinAboveM": 0.25,
+      "maxElevatedAboveM": 1.5,
+      "candidateStepM": 0.5,
+      "dedupeM": 0.25,
+      "maxCandidatesPerPatch": 24
+    }
+  },
+
+  "celebration": {
+    "starSeconds": 1.5,
+    "fadeSeconds": 0.5,
+    "starCount": 10
+  },
+
+  "pokemon": {
+    "walkTargetMinM": 1,
+    "walkTargetExtraM": 4,
+    "walkSurfaceMinY": 0.45,
+    "walkSurfaceStepM": 0.14,
+    "walkMaxStepM": 0.3,
+    "walkArriveM": 0.12,
+    "wanderMinS": 5,
+    "wanderMaxS": 6,
+    "walkSpeedMps": 0.9,
+    "turnSpeedRadS": 2.2439,
+    "fadeInS": 0.9,
+    "captureFadeS": 0.6,
+    "attackHoldS": 0.9,
+    "despawnAfterS": 1.5,
+    "fleeSpeedMps": 2.2,
+    "fleeSeconds": 3,
+    "smokeSeconds": 2,
+    "smokeCount": 26,
+    "smokeSizeM": 0.55
+  },
+
+  "pokestops": {
+    "enabled": true,
+    "maxAlive": 1,
+    "minDistanceM": 2.5,
+    "maxDistanceM": 9,
+    "heightM": 1.9,
+    "surfaceMinY": 0.4,
+    "surfaceStepM": 0.1,
+    "floorBandM": 0.35,
+    "cooldownS": 60,
+    "despawnAfterS": 1.5,
+    "respawnDelayS": 4,
+    "fadeInS": 0.6,
+    "spin": {
+      "initialSpeedRadS": 40,
+      "friction": 1.4,
+      "minSpeedRadS": 0.6
+    },
+    "bubbles": {
+      "min": 1,
+      "max": 4,
+      "radiusM": 0.17,
+      "lifetimeS": 9,
+      "riseHeightM": 0.8,
+      "spreadM": 0.34,
+      "awardMin": 1,
+      "awardMax": 4,
+      "ballWeights": {"poke": 6, "great": 3, "ultra": 2, "premier": 1}
+    }
+  },
+
+  "items": {
+    "unlimited": false,
+    "default": "poke",
+    "starting": {"poke": 30, "great": 15, "ultra": 8, "premier": 5}
+  },
+
+  "ui": {
+    "tutorialDelayMs": 1000,
+    "tutorialText": "Back to 16 works better outside. Try going to a lawn, forest, a big open area. Pokemon may not spawn inside.",
+    "tutorialArt": "/assets/pokemon-go/important-icons/tutorials/findAPlane.png",
+    "hintMs": 3200,
+    "toastMs": 2200,
+    "outdoorHintEveryMs": 20000,
+    "outdoorHintCooldownMs": 60000
+  }
+}
